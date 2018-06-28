@@ -18,6 +18,12 @@ int main(int argc, char** argv)
 	streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
 	streamDepth.start();
 
+	// 4a. create color stream
+	openni::VideoStream streamColor;
+	streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
+	streamColor.start();
+
+
 	// get cameta infomation(得到相机支持的格式)
 	const openni::SensorInfo& rInfo = streamDepth.getSensorInfo();
 	const openni::Array<openni::VideoMode>& aModes = rInfo.getSupportedVideoModes();
@@ -53,6 +59,7 @@ int main(int argc, char** argv)
 		std::cout << "set ok\n";
 	}
 
+	// 读取相机的模式
 	openni::VideoMode vmMode = streamDepth.getVideoMode();
 	std::cout << "Video Mode : " << vmMode.getResolutionX();
 	std::cout << " * " << vmMode.getResolutionY();
@@ -68,10 +75,23 @@ int main(int argc, char** argv)
 		break;
 	}
 
-	// 4a. create color stream
-	openni::VideoStream streamColor;
-	streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
-	streamColor.start();
+	// 获得相机像素的极大值与极小值
+	const int maxPixelValue = streamDepth.getMaxPixelValue();
+	const int minPixelValue = streamDepth.getMinPixelValue();
+	std::cout <<"maxPixelValue:" << maxPixelValue << std::endl;
+	std::cout <<"minPixelValue:" << minPixelValue << std::endl;
+
+
+	// 取得水平／垂直的 FOV。(视角)
+	const float hFovColor = streamColor.getHorizontalFieldOfView();
+	const float vFovColor = streamColor.getVerticalFieldOfView();
+	std::cout << "hColorFOV:" << hFovColor << std::endl;
+	std::cout << "vColorFOV:" << vFovColor << std::endl;
+	const float hFovDepth = streamDepth.getHorizontalFieldOfView();
+	const float vFovDepth = streamDepth.getVerticalFieldOfView();
+	std::cout << "hDepthFOV:" << hFovDepth << std::endl;
+	std::cout << "vDepthFOV:" << vFovDepth << std::endl;
+
 
 	// 5 main loop, continue read
 	openni::VideoFrameRef frameDepth;
