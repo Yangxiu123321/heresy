@@ -18,6 +18,21 @@ int main(int argc, char** argv)
 	streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
 	streamDepth.start();
 
+	openni::VideoMode vmMode = streamDepth.getVideoMode();
+	std::cout << "Video Mode : " << vmMode.getResolutionX();
+	std::cout << " * " << vmMode.getResolutionY();
+	std::cout << " @ " << vmMode.getFps() << "FPS";
+	switch (vmMode.getPixelFormat())
+	{
+	case openni::PIXEL_FORMAT_DEPTH_1_MM:
+		std::cout << " , Unit is 1mm" << std::endl;
+		break;
+
+	case openni::PIXEL_FORMAT_DEPTH_100_UM:
+		std::cout << " , Unit is 100um" << std::endl;
+		break;
+	}
+
 	// 4a. create color stream
 	openni::VideoStream streamColor;
 	streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
