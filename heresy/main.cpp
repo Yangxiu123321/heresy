@@ -18,6 +18,41 @@ int main(int argc, char** argv)
 	streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
 	streamDepth.start();
 
+	// get cameta infomation(得到相机支持的格式)
+	const openni::SensorInfo& rInfo = streamDepth.getSensorInfo();
+	const openni::Array<openni::VideoMode>& aModes = rInfo.getSupportedVideoModes();
+	for (int i = 0; i < aModes.getSize(); ++i)
+	{
+		const openni::VideoMode& rMode = aModes[i];
+		std::cout << "Video Mode : " << rMode.getResolutionX();
+		std::cout << " * " << rMode.getResolutionY();
+		std::cout << " @ " << rMode.getFps() << "FPS";
+		switch (rMode.getPixelFormat())
+		{
+		case openni::PIXEL_FORMAT_DEPTH_1_MM:
+			std::cout << " , Unit is 1mm" << std::endl;
+			break;
+
+		case openni::PIXEL_FORMAT_DEPTH_100_UM:
+			std::cout << " , Unit is 100um" << std::endl;
+			break;
+		default:
+			break;
+		}
+	}
+
+	// 设置相机的模式
+	// set video mode
+	openni::VideoMode setVmMode;
+	setVmMode.setFps(60);
+	setVmMode.setResolution(320, 240);
+	setVmMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
+	if (streamDepth.setVideoMode(setVmMode) == openni::STATUS_OK)
+	{
+		// OK
+		std::cout << "set ok\n";
+	}
+
 	openni::VideoMode vmMode = streamDepth.getVideoMode();
 	std::cout << "Video Mode : " << vmMode.getResolutionX();
 	std::cout << " * " << vmMode.getResolutionY();
