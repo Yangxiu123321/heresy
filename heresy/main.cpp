@@ -111,6 +111,18 @@ int main(int argc, char** argv)
 		cv::Mat mImageDepth;
 		mImageDepthTmp.convertTo(mImageDepth, CV_8U, 255.0f / iMaxDepth);
 		cv::imshow("depth", mImageDepth);
+		// 转换为世界坐标系
+		openni::DepthPixel *pDepth = (openni::DepthPixel*)frameDepth.getData();
+		int x = 320;
+		int y = 240;
+		int z = x + y * frameDepth.getWidth();
+		float fx = 0, fy = 0, fz = 0;
+		openni::DepthPixel&  rDepth = pDepth[z];
+		openni::CoordinateConverter::convertDepthToWorld(streamDepth,
+			x, y, rDepth,
+			&fx, &fy, &fz);
+		std::cout << x << " " << y << " " << rDepth << " " << fx << " " << fy << " " << fz << std::endl;
+
 
 		if (cv::waitKey(1) == 'q')
 		{
