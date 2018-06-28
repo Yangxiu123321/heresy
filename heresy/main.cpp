@@ -4,120 +4,119 @@
 // 1. include OpenNI Header
 #include "OpenNI.h"
 
+#include "opencv2/opencv.hpp"
+
 int main(int argc, char** argv)
 {
+	openni::Status status = openni::STATUS_OK;
 	// 2. initialize OpenNI
-	openni::OpenNI::initialize();
+	status = openni::OpenNI::initialize();
+	if (status != openni::STATUS_OK)
+	{
+		std::cout << "相机初始化失败" << std::endl;
+	}
 
 	// 3. open a device
 	openni::Device devAnyDevice;
-	devAnyDevice.open(openni::ANY_DEVICE);
+	status = devAnyDevice.open(openni::ANY_DEVICE);
+	if (status != openni::STATUS_OK)
+	{
+		std::cout << "打开相机失败" << std::endl;
+	}
 
 	// 检查相机是否支持视角矫正功能
-	if (devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
-		devAnyDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+	//if (devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+	//	devAnyDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
 	// 4. create depth stream
 	openni::VideoStream streamDepth;
-	streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
-	streamDepth.start();
+	status = streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
+	if (status != openni::STATUS_OK)
+	{
+		std::cout << "深度数据流创建失败" << std::endl;
+		return -1;
+	}
+
+	// 设置相机深度的模式
+	// set video mode
+	openni::VideoMode setDepthMode;
+	setDepthMode.setFps(30);
+	setDepthMode.setResolution(640, 480);
+	setDepthMode.setPixelFormat(openni::PIXEL_FORMAT_RGB888);
+	setDepthMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
+	if (streamDepth.setVideoMode(setDepthMode) != openni::STATUS_OK)
+	{
+		std::cout << "深度模式设置失败" << std::endl;
+		return -1;
+	}
 
 	// 4a. create color stream
 	openni::VideoStream streamColor;
-	streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
-	streamColor.start();
-
-
-	// get cameta infomation(得到相机支持的格式)
-	const openni::SensorInfo& rInfo = streamDepth.getSensorInfo();
-	const openni::Array<openni::VideoMode>& aModes = rInfo.getSupportedVideoModes();
-	for (int i = 0; i < aModes.getSize(); ++i)
+	status = streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
+	if (streamDepth.setVideoMode(setDepthMode) != openni::STATUS_OK)
 	{
-		const openni::VideoMode& rMode = aModes[i];
-		std::cout << "Video Mode : " << rMode.getResolutionX();
-		std::cout << " * " << rMode.getResolutionY();
-		std::cout << " @ " << rMode.getFps() << "FPS";
-		switch (rMode.getPixelFormat())
-		{
-		case openni::PIXEL_FORMAT_DEPTH_1_MM:
-			std::cout << " , Unit is 1mm" << std::endl;
-			break;
-
-		case openni::PIXEL_FORMAT_DEPTH_100_UM:
-			std::cout << " , Unit is 100um" << std::endl;
-			break;
-		default:
-			break;
-		}
+		std::cout << "深度数据流创建失败" << std::endl;
+		return -1;
 	}
 
-	// 设置相机的模式
+	// 设置相机彩色的模式
 	// set video mode
-	openni::VideoMode setVmMode;
-	setVmMode.setFps(30);
-	setVmMode.setResolution(6400, 480);
-	setVmMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
-	if (streamDepth.setVideoMode(setVmMode) == openni::STATUS_OK)
+	openni::VideoMode setColorMode;
+	setColorMode.setFps(30);
+	setColorMode.setResolution(640, 480);
+	setColorMode.setPixelFormat(openni::PIXEL_FORMAT_RGB888);
+	setColorMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
+	if (streamDepth.setVideoMode(setColorMode) != openni::STATUS_OK)
 	{
-		// OK
-		std::cout << "set ok\n";
+		std::cout << "彩色模式设置失败" << std::endl;
+		return -1;
 	}
-
-	// 读取相机的模式
-	openni::VideoMode vmMode = streamDepth.getVideoMode();
-	std::cout << "Video Mode : " << vmMode.getResolutionX();
-	std::cout << " * " << vmMode.getResolutionY();
-	std::cout << " @ " << vmMode.getFps() << "FPS";
-	switch (vmMode.getPixelFormat())
+	// 自动曝光
+	openni::CameraSettings *cameraSetting = streamColor.getCameraSettings();
+	if (cameraSetting == NULL)
 	{
-	case openni::PIXEL_FORMAT_DEPTH_1_MM:
-		std::cout << " , Unit is 1mm" << std::endl;
-		break;
-
-	case openni::PIXEL_FORMAT_DEPTH_100_UM:
-		std::cout << " , Unit is 100um" << std::endl;
-		break;
+		std::cout << "曝光等设置创建失败" << std::endl;
+		return -1;
 	}
-
-	// 获得相机像素的极大值与极小值
-	const int maxPixelValue = streamDepth.getMaxPixelValue();
-	const int minPixelValue = streamDepth.getMinPixelValue();
-	std::cout <<"maxPixelValue:" << maxPixelValue << std::endl;
-	std::cout <<"minPixelValue:" << minPixelValue << std::endl;
-
-
-	// 取得水平／垂直的 FOV。(视角)
-	const float hFovColor = streamColor.getHorizontalFieldOfView();
-	const float vFovColor = streamColor.getVerticalFieldOfView();
-	std::cout << "hColorFOV:" << hFovColor << std::endl;
-	std::cout << "vColorFOV:" << vFovColor << std::endl;
-	const float hFovDepth = streamDepth.getHorizontalFieldOfView();
-	const float vFovDepth = streamDepth.getVerticalFieldOfView();
-	std::cout << "hDepthFOV:" << hFovDepth << std::endl;
-	std::cout << "vDepthFOV:" << vFovDepth << std::endl;
-
+	status = cameraSetting->setAutoExposureEnabled(true);
+	if (status != openni::STATUS_OK)
+	{
+		std::cout << "自动曝光设置失败" << std::endl;
+		return -1;
+	}
+	const int iMaxDepth = streamDepth.getMaxPixelValue();
 	// 5 main loop, continue read
 	openni::VideoFrameRef frameDepth;
 	openni::VideoFrameRef frameColor;
-	for (int i = 0; i < 100; ++i)
+	streamDepth.start();
+	streamColor.start();
+	cv::namedWindow("color",cv::WINDOW_AUTOSIZE);
+	cv::namedWindow("depth", cv::WINDOW_AUTOSIZE);
+	while(true)
 	{
 		// 5.1 get frame
 		streamDepth.readFrame(&frameDepth);
 		streamColor.readFrame(&frameColor);
 
-		// 5.2 get data array
-		const openni::DepthPixel* pDepth
-			= (const openni::DepthPixel*)frameDepth.getData();
-		const openni::RGB888Pixel* pColor
-			= (const openni::RGB888Pixel*)frameColor.getData();
+		// 得到彩色图像
+		cv::Mat mImageRGB(frameColor.getHeight(), frameColor.getWidth(),
+			CV_8UC3, (void*)frameColor.getData());
+		cv::Mat mImageBGR;
+		cv::cvtColor(mImageRGB, mImageBGR, CV_RGB2BGR);
+		cv::imshow("color", mImageBGR);
 
-		// 5.3 output the depth value of center point
-		int idx = frameDepth.getWidth() * (frameDepth.getHeight() + 1) / 2;
-		std::cout << pDepth[idx] << "( "
-			<< (int)pColor[idx].r << ","
-			<< (int)pColor[idx].g << ","
-			<< (int)pColor[idx].b << ")"
-			<< std::endl;
+		// 得到深度图
+		cv::Mat mImageDepthTmp(frameDepth.getHeight(), frameDepth.getWidth(),
+			CV_16UC1, (void*)frameDepth.getData());
+		cv::Mat mImageDepth;
+		mImageDepthTmp.convertTo(mImageDepth, CV_8U, 255.0f / iMaxDepth);
+		cv::imshow("depth", mImageDepth);
+
+		if (cv::waitKey(1) == 'q')
+		{
+			break;
+		}
+	    
 	}
 
 	// 6. close
