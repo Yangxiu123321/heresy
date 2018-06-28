@@ -13,6 +13,9 @@ int main(int argc, char** argv)
 	openni::Device devAnyDevice;
 	devAnyDevice.open(openni::ANY_DEVICE);
 
+	// 检查相机是否支持视角矫正功能
+	std::cout << devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR) << std::endl;;
+
 	// 4. create depth stream
 	openni::VideoStream streamDepth;
 	streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
@@ -91,21 +94,6 @@ int main(int argc, char** argv)
 	const float vFovDepth = streamDepth.getVerticalFieldOfView();
 	std::cout << "hDepthFOV:" << hFovDepth << std::endl;
 	std::cout << "vDepthFOV:" << vFovDepth << std::endl;
-
-
-	// 相机的白平衡及常用设置(彩色图像)
-	openni::CameraSettings *cameraSetting = streamColor.getCameraSettings();
-	if (cameraSetting == NULL)
-	{
-		std::cout << "not support Set" << std::endl;
-	}
-	cameraSetting->setAutoExposureEnabled(false);
-	bool autoExposureValue = cameraSetting->getAutoExposureEnabled();
-	std::cout << "自动曝光值:" << autoExposureValue << std::endl;
-	cameraSetting->setExposure(15);
-	const int exposureValue = cameraSetting->getExposure();
-	std::cout << "手动曝光值：" << exposureValue << std::endl;
-	cameraSetting->setAutoExposureEnabled(true);
 
 	// 5 main loop, continue read
 	openni::VideoFrameRef frameDepth;
