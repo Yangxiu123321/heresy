@@ -50,8 +50,8 @@ int main(int argc, char** argv)
 	// 设置相机的模式
 	// set video mode
 	openni::VideoMode setVmMode;
-	setVmMode.setFps(60);
-	setVmMode.setResolution(320, 240);
+	setVmMode.setFps(30);
+	setVmMode.setResolution(6400, 480);
 	setVmMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
 	if (streamDepth.setVideoMode(setVmMode) == openni::STATUS_OK)
 	{
@@ -93,6 +93,20 @@ int main(int argc, char** argv)
 	std::cout << "vDepthFOV:" << vFovDepth << std::endl;
 
 
+	// 相机的白平衡及常用设置(彩色图像)
+	openni::CameraSettings *cameraSetting = streamColor.getCameraSettings();
+	if (cameraSetting == NULL)
+	{
+		std::cout << "not support Set" << std::endl;
+	}
+	cameraSetting->setAutoExposureEnabled(false);
+	bool autoExposureValue = cameraSetting->getAutoExposureEnabled();
+	std::cout << "自动曝光值:" << autoExposureValue << std::endl;
+	cameraSetting->setExposure(15);
+	const int exposureValue = cameraSetting->getExposure();
+	std::cout << "手动曝光值：" << exposureValue << std::endl;
+	cameraSetting->setAutoExposureEnabled(true);
+
 	// 5 main loop, continue read
 	openni::VideoFrameRef frameDepth;
 	openni::VideoFrameRef frameColor;
@@ -121,7 +135,7 @@ int main(int argc, char** argv)
 	streamDepth.destroy();
 	streamColor.destroy();
 	devAnyDevice.close();
-
+	
 	// 7. shutdown
 	openni::OpenNI::shutdown();
 
