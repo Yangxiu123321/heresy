@@ -13,7 +13,7 @@ int main(int argc, char** argv)
 	status = openni::OpenNI::initialize();
 	if (status != openni::STATUS_OK)
 	{
-		std::cout << "相机初始化失败" << std::endl;
+		std::cout << "相机初始化失败:" << openni::OpenNI::getExtendedError() << std::endl;
 	}
 
 	// 3. open a device
@@ -21,7 +21,7 @@ int main(int argc, char** argv)
 	status = devAnyDevice.open(openni::ANY_DEVICE);
 	if (status != openni::STATUS_OK)
 	{
-		std::cout << "打开相机失败" << std::endl;
+		std::cout << "打开相机失败" << openni::OpenNI::getExtendedError() << std::endl;
 	}
 
 	// 检查相机是否支持视角矫正功能
