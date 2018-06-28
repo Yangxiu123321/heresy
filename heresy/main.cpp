@@ -14,7 +14,8 @@ int main(int argc, char** argv)
 	devAnyDevice.open(openni::ANY_DEVICE);
 
 	// 检查相机是否支持视角矫正功能
-	std::cout << devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR) << std::endl;;
+	if (devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+		devAnyDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
 	// 4. create depth stream
 	openni::VideoStream streamDepth;
