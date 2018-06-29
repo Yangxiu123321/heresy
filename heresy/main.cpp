@@ -1,115 +1,81 @@
 // STL Header
 #include <iostream>
 #include <string>
-#include <vector>
 
-// OpenCV Header
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-
-// OpenNI Header
+// 1. include OpenNI Header
 #include <OpenNI.h>
 
-// namespace
+// using namespace
 using namespace std;
 using namespace openni;
 
-class CDevice
+/**
+* The listener for depth video stream
+*/
+class OutputDpeth : public VideoStream::NewFrameListener
 {
 public:
-	string        sWindow;
-	Device*       pDevice;
-	VideoStream*  pDepthStream;
-
-	CDevice(int idx, const char* uri)
+	// this function will be called when video stream get new frame
+	void onNewFrame(VideoStream& rStream)
 	{
-		pDevice = new Device();
-		pDevice->open(uri);
+		VideoFrameRef vfDepth;
+		if (rStream.readFrame(&vfDepth) == STATUS_OK)
+		{
+			// a1 get data array
+			const DepthPixel* pDepth
+				= static_cast<const DepthPixel*>(vfDepth.getData());
 
-		pDepthStream = new VideoStream();
-		pDepthStream->create(*pDevice, SENSOR_DEPTH);
+			// a2 output the depth value of center point
+			int w = vfDepth.getWidth(),
+				h = vfDepth.getHeight();
+			int x = w / 2, y = h / 2;
+			cout << pDepth[x + y * w] << endl;
 
-		// create OpenCV Window
-		stringstream mStrStream;
-		mStrStream << "Sensor_" << idx << endl;
-		sWindow = mStrStream.str();
-		cv::namedWindow(sWindow.c_str(), CV_WINDOW_AUTOSIZE);
-
-		// start
-		pDepthStream->start();
+			// a3 release frame
+			vfDepth.release();
+		}
+		else
+		{
+			cerr << "Can not read frame\n";
+			cerr << OpenNI::getExtendedError() << endl;
+		}
 	}
 };
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-	// Initial OpenNI
+	// 2. initialize OpenNI
 	OpenNI::initialize();
 
-	// enumerate devices
-	Array<DeviceInfo> aDeviceList;
-	OpenNI::enumerateDevices(&aDeviceList);
+	// 3. open a device
+	Device devDevice;
+	devDevice.open(ANY_DEVICE);
 
-	// output information
-	vector<CDevice>  vDevices;
-	cout << "There are " << aDeviceList.getSize()
-		<< " devices on this system." << endl;
-	for (int i = 0; i < aDeviceList.getSize(); ++i)
-	{
-		cout << "Device " << i << "\n";
-		const DeviceInfo& rDevInfo = aDeviceList[i];
+	// 4. create depth stream
+	VideoStream vsDepth;
+	vsDepth.create(devDevice, SENSOR_DEPTH);
 
-		cout << " " << rDevInfo.getName() << " by " << rDevInfo.getVendor() << "\n";
-		cout << " PID: " << rDevInfo.getUsbProductId() << "\n";
-		cout << " VID: " << rDevInfo.getUsbVendorId() << "\n";
-		cout << " URI: " << rDevInfo.getUri() << endl;
+	OutputDpeth mOutputDepth;
 
-		// initialize
-		CDevice mDevWin(i, aDeviceList[i].getUri());
-		vDevices.push_back(mDevWin);
-	}
+	vsDepth.addNewFrameListener(&mOutputDepth);
+	
+	vsDepth.start();
 
-	while (true)
-	{
-		for (vector<CDevice>::iterator itDev = vDevices.begin();
-			itDev != vDevices.end(); ++itDev)
-		{
-			// get depth frame
-			VideoFrameRef vfFrame;
-			itDev->pDepthStream->readFrame(&vfFrame);
+	// 5 wait any input (some char and Enter) to quit
+	string sInput;
+	cin >> sInput;
 
-			// convert data to OpenCV format
-			const cv::Mat mImageDepth(vfFrame.getHeight(), vfFrame.getWidth(),
-				CV_16UC1,
-				const_cast<void*>(vfFrame.getData()));
+	// 6 stop reading
+	vsDepth.removeNewFrameListener(&mOutputDepth);
+	vsDepth.stop();
 
-			// re-map depth data [0,Max] to [0,255]
-			cv::Mat mScaledDepth;
-			mImageDepth.convertTo(mScaledDepth, CV_8U,
-				255.0 / itDev->pDepthStream->getMaxPixelValue());
+	// destroy depth stream
+	vsDepth.destroy();
 
-			// show image
-			cv::imshow(itDev->sWindow.c_str(), mScaledDepth);
+	// close device
+	devDevice.close();
 
-			vfFrame.release();
-		}
-
-		// check keyboard
-		if (cv::waitKey(1) == 'q')
-			break;
-	}
-
-	// stop
-	for (vector<CDevice>::iterator itDev = vDevices.begin();
-		itDev != vDevices.end(); ++itDev)
-	{
-		itDev->pDepthStream->stop();
-		itDev->pDepthStream->destroy();
-		delete itDev->pDepthStream;
-
-		itDev->pDevice->close();
-		delete itDev->pDevice;
-	}
+	// 7. shutdown
 	OpenNI::shutdown();
 
 	return 0;
