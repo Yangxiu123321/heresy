@@ -25,8 +25,8 @@ int main(int argc, char** argv)
 	}
 
 	// 检查相机是否支持视角矫正功能
-	//if (devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
-	//	devAnyDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+	if (devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+		devAnyDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
 	// 4. create depth stream
 	openni::VideoStream streamDepth;
@@ -50,6 +50,11 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
+	// creat recorder
+	openni::Recorder recDepthRecorder;
+	recDepthRecorder.create("f:\\dtest.oni");
+	recDepthRecorder.attach(streamDepth);
+
 	// 4a. create color stream
 	openni::VideoStream streamColor;
 	status = streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
@@ -65,12 +70,17 @@ int main(int argc, char** argv)
 	setColorMode.setFps(30);
 	setColorMode.setResolution(640, 480);
 	setColorMode.setPixelFormat(openni::PIXEL_FORMAT_RGB888);
-	setColorMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
-	if (streamDepth.setVideoMode(setColorMode) != openni::STATUS_OK)
+	if (streamColor.setVideoMode(setColorMode) != openni::STATUS_OK)
 	{
 		std::cout << "彩色模式设置失败" << std::endl;
 		return -1;
 	}
+
+	// creat recorder
+	openni::Recorder recColorRecorder;
+	recColorRecorder.create("f:\\ctest.oni");
+	recColorRecorder.attach(streamColor);
+
 	// 自动曝光
 	openni::CameraSettings *cameraSetting = streamColor.getCameraSettings();
 	if (cameraSetting == NULL)
@@ -84,12 +94,15 @@ int main(int argc, char** argv)
 		std::cout << "自动曝光设置失败" << std::endl;
 		return -1;
 	}
+
 	const int iMaxDepth = streamDepth.getMaxPixelValue();
 	// 5 main loop, continue read
 	openni::VideoFrameRef frameDepth;
 	openni::VideoFrameRef frameColor;
 	streamDepth.start();
 	streamColor.start();
+	recDepthRecorder.start();
+	recColorRecorder.start();
 	cv::namedWindow("color",cv::WINDOW_AUTOSIZE);
 	cv::namedWindow("depth", cv::WINDOW_AUTOSIZE);
 	while(true)
@@ -111,18 +124,6 @@ int main(int argc, char** argv)
 		cv::Mat mImageDepth;
 		mImageDepthTmp.convertTo(mImageDepth, CV_8U, 255.0f / iMaxDepth);
 		cv::imshow("depth", mImageDepth);
-		// 转换为世界坐标系
-		openni::DepthPixel *pDepth = (openni::DepthPixel*)frameDepth.getData();
-		int x = 320;
-		int y = 240;
-		int z = x + y * frameDepth.getWidth();
-		float fx = 0, fy = 0, fz = 0;
-		openni::DepthPixel&  rDepth = pDepth[z];
-		openni::CoordinateConverter::convertDepthToWorld(streamDepth,
-			x, y, rDepth,
-			&fx, &fy, &fz);
-		std::cout << x << " " << y << " " << rDepth << " " << fx << " " << fy << " " << fz << std::endl;
-
 
 		if (cv::waitKey(1) == 'q')
 		{
