@@ -1,144 +1,116 @@
 // STL Header
 #include <iostream>
+#include <string>
+#include <vector>
 
-// 1. include OpenNI Header
-#include "OpenNI.h"
+// OpenCV Header
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
-#include "opencv2/opencv.hpp"
+// OpenNI Header
+#include <OpenNI.h>
 
-int main(int argc, char** argv)
+// namespace
+using namespace std;
+using namespace openni;
+
+class CDevice
 {
-	openni::Status status = openni::STATUS_OK;
-	// 2. initialize OpenNI
-	status = openni::OpenNI::initialize();
-	if (status != openni::STATUS_OK)
+public:
+	string        sWindow;
+	Device*       pDevice;
+	VideoStream*  pDepthStream;
+
+	CDevice(int idx, const char* uri)
 	{
-		std::cout << "相机初始化失败:" << openni::OpenNI::getExtendedError() << std::endl;
+		pDevice = new Device();
+		pDevice->open(uri);
+
+		pDepthStream = new VideoStream();
+		pDepthStream->create(*pDevice, SENSOR_DEPTH);
+
+		// create OpenCV Window
+		stringstream mStrStream;
+		mStrStream << "Sensor_" << idx << endl;
+		sWindow = mStrStream.str();
+		cv::namedWindow(sWindow.c_str(), CV_WINDOW_AUTOSIZE);
+
+		// start
+		pDepthStream->start();
+	}
+};
+
+int main(int argc, char **argv)
+{
+	// Initial OpenNI
+	OpenNI::initialize();
+
+	// enumerate devices
+	Array<DeviceInfo> aDeviceList;
+	OpenNI::enumerateDevices(&aDeviceList);
+
+	// output information
+	vector<CDevice>  vDevices;
+	cout << "There are " << aDeviceList.getSize()
+		<< " devices on this system." << endl;
+	for (int i = 0; i < aDeviceList.getSize(); ++i)
+	{
+		cout << "Device " << i << "\n";
+		const DeviceInfo& rDevInfo = aDeviceList[i];
+
+		cout << " " << rDevInfo.getName() << " by " << rDevInfo.getVendor() << "\n";
+		cout << " PID: " << rDevInfo.getUsbProductId() << "\n";
+		cout << " VID: " << rDevInfo.getUsbVendorId() << "\n";
+		cout << " URI: " << rDevInfo.getUri() << endl;
+
+		// initialize
+		CDevice mDevWin(i, aDeviceList[i].getUri());
+		vDevices.push_back(mDevWin);
 	}
 
-	// 3. open a device
-	openni::Device devAnyDevice;
-	status = devAnyDevice.open(openni::ANY_DEVICE);
-	if (status != openni::STATUS_OK)
+	while (true)
 	{
-		std::cout << "打开相机失败" << openni::OpenNI::getExtendedError() << std::endl;
-	}
-
-	// 检查相机是否支持视角矫正功能
-	if (devAnyDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
-		devAnyDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
-
-	// 4. create depth stream
-	openni::VideoStream streamDepth;
-	status = streamDepth.create(devAnyDevice, openni::SENSOR_DEPTH);
-	if (status != openni::STATUS_OK)
-	{
-		std::cout << "深度数据流创建失败" << std::endl;
-		return -1;
-	}
-
-	// 设置相机深度的模式
-	// set video mode
-	openni::VideoMode setDepthMode;
-	setDepthMode.setFps(30);
-	setDepthMode.setResolution(640, 480);
-	setDepthMode.setPixelFormat(openni::PIXEL_FORMAT_RGB888);
-	setDepthMode.setPixelFormat(openni::PIXEL_FORMAT_DEPTH_1_MM);
-	if (streamDepth.setVideoMode(setDepthMode) != openni::STATUS_OK)
-	{
-		std::cout << "深度模式设置失败" << std::endl;
-		return -1;
-	}
-
-	// creat recorder
-	openni::Recorder recDepthRecorder;
-	recDepthRecorder.create("f:\\dtest.oni");
-	recDepthRecorder.attach(streamDepth);
-
-	// 4a. create color stream
-	openni::VideoStream streamColor;
-	status = streamColor.create(devAnyDevice, openni::SENSOR_COLOR);
-	if (streamDepth.setVideoMode(setDepthMode) != openni::STATUS_OK)
-	{
-		std::cout << "深度数据流创建失败" << std::endl;
-		return -1;
-	}
-
-	// 设置相机彩色的模式
-	// set video mode
-	openni::VideoMode setColorMode;
-	setColorMode.setFps(30);
-	setColorMode.setResolution(640, 480);
-	setColorMode.setPixelFormat(openni::PIXEL_FORMAT_RGB888);
-	if (streamColor.setVideoMode(setColorMode) != openni::STATUS_OK)
-	{
-		std::cout << "彩色模式设置失败" << std::endl;
-		return -1;
-	}
-
-	// creat recorder
-	openni::Recorder recColorRecorder;
-	recColorRecorder.create("f:\\ctest.oni");
-	recColorRecorder.attach(streamColor);
-
-	// 自动曝光
-	openni::CameraSettings *cameraSetting = streamColor.getCameraSettings();
-	if (cameraSetting == NULL)
-	{
-		std::cout << "曝光等设置创建失败" << std::endl;
-		return -1;
-	}
-	status = cameraSetting->setAutoExposureEnabled(true);
-	if (status != openni::STATUS_OK)
-	{
-		std::cout << "自动曝光设置失败" << std::endl;
-		return -1;
-	}
-
-	const int iMaxDepth = streamDepth.getMaxPixelValue();
-	// 5 main loop, continue read
-	openni::VideoFrameRef frameDepth;
-	openni::VideoFrameRef frameColor;
-	streamDepth.start();
-	streamColor.start();
-	recDepthRecorder.start();
-	recColorRecorder.start();
-	cv::namedWindow("color",cv::WINDOW_AUTOSIZE);
-	cv::namedWindow("depth", cv::WINDOW_AUTOSIZE);
-	while(true)
-	{
-		// 5.1 get frame
-		streamDepth.readFrame(&frameDepth);
-		streamColor.readFrame(&frameColor);
-
-		// 得到彩色图像
-		cv::Mat mImageRGB(frameColor.getHeight(), frameColor.getWidth(),
-			CV_8UC3, (void*)frameColor.getData());
-		cv::Mat mImageBGR;
-		cv::cvtColor(mImageRGB, mImageBGR, CV_RGB2BGR);
-		cv::imshow("color", mImageBGR);
-
-		// 得到深度图
-		cv::Mat mImageDepthTmp(frameDepth.getHeight(), frameDepth.getWidth(),
-			CV_16UC1, (void*)frameDepth.getData());
-		cv::Mat mImageDepth;
-		mImageDepthTmp.convertTo(mImageDepth, CV_8U, 255.0f / iMaxDepth);
-		cv::imshow("depth", mImageDepth);
-
-		if (cv::waitKey(1) == 'q')
+		for (vector<CDevice>::iterator itDev = vDevices.begin();
+			itDev != vDevices.end(); ++itDev)
 		{
-			break;
+			// get depth frame
+			VideoFrameRef vfFrame;
+			itDev->pDepthStream->readFrame(&vfFrame);
+
+			// convert data to OpenCV format
+			const cv::Mat mImageDepth(vfFrame.getHeight(), vfFrame.getWidth(),
+				CV_16UC1,
+				const_cast<void*>(vfFrame.getData()));
+
+			// re-map depth data [0,Max] to [0,255]
+			cv::Mat mScaledDepth;
+			mImageDepth.convertTo(mScaledDepth, CV_8U,
+				255.0 / itDev->pDepthStream->getMaxPixelValue());
+
+			// show image
+			cv::imshow(itDev->sWindow.c_str(), mScaledDepth);
+
+			vfFrame.release();
 		}
-	    
+
+		// check keyboard
+		if (cv::waitKey(1) == 'q')
+			break;
 	}
 
-	// 6. close
-	streamDepth.destroy();
-	streamColor.destroy();
-	devAnyDevice.close();
-	
-	// 7. shutdown
-	openni::OpenNI::shutdown();
+	// stop
+	for (vector<CDevice>::iterator itDev = vDevices.begin();
+		itDev != vDevices.end(); ++itDev)
+	{
+		itDev->pDepthStream->stop();
+		itDev->pDepthStream->destroy();
+		delete itDev->pDepthStream;
+
+		itDev->pDevice->close();
+		delete itDev->pDevice;
+	}
+	OpenNI::shutdown();
 
 	return 0;
 }
