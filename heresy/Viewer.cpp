@@ -37,7 +37,7 @@
 #define GL_WIN_SIZE_Y	1024
 #define TEXTURE_SIZE	512
 
-#define DEFAULT_DISPLAY_MODE	DISPLAY_MODE_DEPTH
+#define DEFAULT_DISPLAY_MODE	DISPLAY_MODE_DEPTH1
 
 #define MIN_NUM_CHUNKS(data_size, chunk_size)	((((data_size)-1) / (chunk_size) + 1))
 #define MIN_CHUNKS_SIZE(data_size, chunk_size)	(MIN_NUM_CHUNKS(data_size, chunk_size) * (chunk_size))
@@ -62,8 +62,8 @@ void SampleViewer::glutKeyboard(unsigned char key, int x, int y)
 
 
 
-SampleViewer::SampleViewer(const char* strSampleName, openni::Device& device, openni::VideoStream& depth, openni::VideoStream& color) :
-	m_device(device), m_depthStream(depth), m_colorStream(color), m_streams(NULL), m_eViewState(DEFAULT_DISPLAY_MODE), m_pTexMap(NULL)
+SampleViewer::SampleViewer(const char* strSampleName, openni::VideoStream& depth1, openni::VideoStream& depth2) :
+	m_pTexMap(NULL), m_eViewState(DEFAULT_DISPLAY_MODE), m_depth1(depth1), m_depth2(depth2), m_streams(NULL) 
 
 {
 	ms_self = this;
@@ -83,54 +83,22 @@ SampleViewer::~SampleViewer()
 
 openni::Status SampleViewer::init(int argc, char **argv)
 {
-	openni::VideoMode depthVideoMode;
-	openni::VideoMode colorVideoMode;
+	openni::VideoMode videoMode1 = m_depth1.getVideoMode();
+	openni::VideoMode videoMode2 = m_depth2.getVideoMode();
 
-	if (m_depthStream.isValid() && m_colorStream.isValid())
+	if (videoMode1.getResolutionX() != videoMode2.getResolutionX() ||
+		videoMode1.getResolutionY() != videoMode2.getResolutionY())
 	{
-		depthVideoMode = m_depthStream.getVideoMode();
-		colorVideoMode = m_colorStream.getVideoMode();
-
-		int depthWidth = depthVideoMode.getResolutionX();
-		int depthHeight = depthVideoMode.getResolutionY();
-		int colorWidth = colorVideoMode.getResolutionX();
-		int colorHeight = colorVideoMode.getResolutionY();
-
-		if (depthWidth == colorWidth &&
-			depthHeight == colorHeight)
-		{
-			m_width = depthWidth;
-			m_height = depthHeight;
-		}
-		else
-		{
-			printf("Error - expect color and depth to be in same resolution: D: %dx%d, C: %dx%d\n",
-				depthWidth, depthHeight,
-				colorWidth, colorHeight);
-			return openni::STATUS_ERROR;
-		}
-	}
-	else if (m_depthStream.isValid())
-	{
-		depthVideoMode = m_depthStream.getVideoMode();
-		m_width = depthVideoMode.getResolutionX();
-		m_height = depthVideoMode.getResolutionY();
-	}
-	else if (m_colorStream.isValid())
-	{
-		colorVideoMode = m_colorStream.getVideoMode();
-		m_width = colorVideoMode.getResolutionX();
-		m_height = colorVideoMode.getResolutionY();
-	}
-	else
-	{
-		printf("Error - expects at least one of the streams to be valid...\n");
+		printf("Streams need to match resolution.\n");
 		return openni::STATUS_ERROR;
 	}
 
+	m_width = videoMode1.getResolutionX();
+	m_height = videoMode1.getResolutionY();
+
 	m_streams = new openni::VideoStream*[2];
-	m_streams[0] = &m_depthStream;
-	m_streams[1] = &m_colorStream;
+	m_streams[0] = &m_depth1;
+	m_streams[1] = &m_depth2;
 
 	// Texture map init
 	m_nTexMapX = MIN_CHUNKS_SIZE(m_width, TEXTURE_SIZE);
@@ -146,10 +114,94 @@ openni::Status SampleViewer::run()	//Does not return
 
 	return openni::STATUS_OK;
 }
+
+void SampleViewer::displayFrame(const openni::VideoFrameRef& frame)
+{
+	if (!frame.isValid())
+		return;
+
+	const openni::DepthPixel* pDepthRow = (const openni::DepthPixel*)frame.getData();
+	openni::RGB888Pixel* pTexRow = m_pTexMap + frame.getCropOriginY() * m_nTexMapX;
+	int rowSize = frame.getStrideInBytes() / sizeof(openni::DepthPixel);
+
+	for (int y = 0; y < frame.getHeight(); ++y)
+	{
+		const openni::DepthPixel* pDepth = pDepthRow;
+		openni::RGB888Pixel* pTex = pTexRow + frame.getCropOriginX();
+
+		for (int x = 0; x < frame.getWidth(); ++x, ++pDepth, ++pTex)
+		{
+			if (*pDepth != 0)
+			{
+				int nHistValue = m_pDepthHist[*pDepth];
+				pTex->r = nHistValue;
+				pTex->g = nHistValue;
+				pTex->b = nHistValue;
+			}
+		}
+
+		pDepthRow += rowSize;
+		pTexRow += m_nTexMapX;
+	}
+
+}
+
+void SampleViewer::displayBothFrames()
+{
+	struct
+	{
+		const openni::DepthPixel* pDepthRow;
+		const openni::DepthPixel* pDepth;
+	}  mainFrame, maskFrame;
+
+	mainFrame.pDepthRow = (const openni::DepthPixel*)m_depth1Frame.getData();
+	maskFrame.pDepthRow = (const openni::DepthPixel*)m_depth2Frame.getData();
+	openni::RGB888Pixel* pTexRow = m_pTexMap + m_depth1Frame.getCropOriginY() * m_nTexMapX;
+	int rowSize = m_depth1Frame.getStrideInBytes() / sizeof(openni::DepthPixel);
+
+	for (int y = 0; y < m_depth1Frame.getHeight(); ++y)
+	{
+		mainFrame.pDepth = mainFrame.pDepthRow;
+		maskFrame.pDepth = maskFrame.pDepthRow;
+		openni::RGB888Pixel* pTex = pTexRow + m_depth1Frame.getCropOriginX();
+
+		for (int x = 0; x < m_depth1Frame.getWidth(); ++x, ++maskFrame.pDepth, ++mainFrame.pDepth, ++pTex)
+		{
+			if (*mainFrame.pDepth != 0)
+			{
+				int nHistValue = m_pDepthHist[*mainFrame.pDepth];
+
+				if (*maskFrame.pDepth == 0)
+				{
+					// No match
+					pTex->r = nHistValue;
+					pTex->g = nHistValue;
+					pTex->b = nHistValue;
+				}
+				else
+				{
+					nHistValue = m_pDepthHist[(*mainFrame.pDepth+*maskFrame.pDepth)/2];
+					// Match
+					pTex->r = nHistValue;
+					pTex->g = 0;
+					pTex->b = 0;
+				}
+			}
+		}
+
+		mainFrame.pDepthRow += rowSize;
+		maskFrame.pDepthRow += rowSize;
+		pTexRow += m_nTexMapX;
+	}
+
+}
+
+
 void SampleViewer::display()
 {
 	int changedIndex;
 	openni::Status rc = openni::OpenNI::waitForAnyStream(m_streams, 2, &changedIndex);
+
 	if (rc != openni::STATUS_OK)
 	{
 		printf("Wait failed\n");
@@ -159,9 +211,9 @@ void SampleViewer::display()
 	switch (changedIndex)
 	{
 	case 0:
-		m_depthStream.readFrame(&m_depthFrame); break;
+		m_depth1.readFrame(&m_depth1Frame); break;
 	case 1:
-		m_colorStream.readFrame(&m_colorFrame); break;
+		m_depth2.readFrame(&m_depth2Frame); break;
 	default:
 		printf("Error in wait\n");
 	}
@@ -173,63 +225,25 @@ void SampleViewer::display()
 	glLoadIdentity();
 	glOrtho(0, GL_WIN_SIZE_X, GL_WIN_SIZE_Y, 0, -1.0, 1.0);
 
-	if (m_depthFrame.isValid())
-	{
-		calculateHistogram(m_pDepthHist, MAX_DEPTH, m_depthFrame);
-	}
+	if (m_depth1Frame.isValid() && m_eViewState != DISPLAY_MODE_DEPTH2)
+		calculateHistogram(m_pDepthHist, MAX_DEPTH, m_depth1Frame);
+	else
+		calculateHistogram(m_pDepthHist, MAX_DEPTH, m_depth2Frame);
 
 	memset(m_pTexMap, 0, m_nTexMapX*m_nTexMapY*sizeof(openni::RGB888Pixel));
 
 	// check if we need to draw image frame to texture
-	if ((m_eViewState == DISPLAY_MODE_OVERLAY ||
-		m_eViewState == DISPLAY_MODE_IMAGE) && m_colorFrame.isValid())
+
+	switch (m_eViewState)
 	{
-		const openni::RGB888Pixel* pImageRow = (const openni::RGB888Pixel*)m_colorFrame.getData();
-		openni::RGB888Pixel* pTexRow = m_pTexMap + m_colorFrame.getCropOriginY() * m_nTexMapX;
-		int rowSize = m_colorFrame.getStrideInBytes() / sizeof(openni::RGB888Pixel);
-
-		for (int y = 0; y < m_colorFrame.getHeight(); ++y)
-		{
-			const openni::RGB888Pixel* pImage = pImageRow;
-			openni::RGB888Pixel* pTex = pTexRow + m_colorFrame.getCropOriginX();
-
-			for (int x = 0; x < m_colorFrame.getWidth(); ++x, ++pImage, ++pTex)
-			{
-				*pTex = *pImage;
-			}
-
-			pImageRow += rowSize;
-			pTexRow += m_nTexMapX;
-		}
-	}
-
-	// check if we need to draw depth frame to texture
-	if ((m_eViewState == DISPLAY_MODE_OVERLAY ||
-		m_eViewState == DISPLAY_MODE_DEPTH) && m_depthFrame.isValid())
-	{
-		const openni::DepthPixel* pDepthRow = (const openni::DepthPixel*)m_depthFrame.getData();
-		openni::RGB888Pixel* pTexRow = m_pTexMap + m_depthFrame.getCropOriginY() * m_nTexMapX;
-		int rowSize = m_depthFrame.getStrideInBytes() / sizeof(openni::DepthPixel);
-
-		for (int y = 0; y < m_depthFrame.getHeight(); ++y)
-		{
-			const openni::DepthPixel* pDepth = pDepthRow;
-			openni::RGB888Pixel* pTex = pTexRow + m_depthFrame.getCropOriginX();
-
-			for (int x = 0; x < m_depthFrame.getWidth(); ++x, ++pDepth, ++pTex)
-			{
-				if (*pDepth != 0)
-				{
-					int nHistValue = m_pDepthHist[*pDepth];
-					pTex->r = nHistValue;
-					pTex->g = nHistValue;
-					pTex->b = 0;
-				}
-			}
-
-			pDepthRow += rowSize;
-			pTexRow += m_nTexMapX;
-		}
+	case DISPLAY_MODE_DEPTH1:
+		displayFrame(m_depth1Frame);
+		break;
+	case DISPLAY_MODE_DEPTH2:
+		displayFrame(m_depth2Frame);
+		break;
+	default:
+		displayBothFrames();
 	}
 
 	glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP_SGIS, GL_TRUE);
@@ -270,29 +284,24 @@ void SampleViewer::onKey(unsigned char key, int /*x*/, int /*y*/)
 	switch (key)
 	{
 	case 27:
-		m_depthStream.stop();
-		m_colorStream.stop();
-		m_depthStream.destroy();
-		m_colorStream.destroy();
-		m_device.close();
-		openni::OpenNI::shutdown();
+		m_depth1.stop();
+		m_depth2.stop();
+		m_depth1.destroy();
+		m_depth2.destroy();
 
+		openni::OpenNI::shutdown();
 		exit (1);
 	case '1':
 		m_eViewState = DISPLAY_MODE_OVERLAY;
-		m_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 		break;
 	case '2':
-		m_eViewState = DISPLAY_MODE_DEPTH;
-		m_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_OFF);
+		m_eViewState = DISPLAY_MODE_DEPTH1;
 		break;
 	case '3':
-		m_eViewState = DISPLAY_MODE_IMAGE;
-		m_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_OFF);
+		m_eViewState = DISPLAY_MODE_DEPTH2;
 		break;
 	case 'm':
-		m_depthStream.setMirroringEnabled(!m_depthStream.getMirroringEnabled());
-		m_colorStream.setMirroringEnabled(!m_colorStream.getMirroringEnabled());
+//		m_rContext.SetGlobalMirror(!m_rContext.GetGlobalMirror());
 		break;
 	}
 

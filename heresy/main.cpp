@@ -21,74 +21,119 @@
 #include <OpenNI.h>
 #include "Viewer.h"
 
+
 int main(int argc, char** argv)
 {
 	openni::Status rc = openni::STATUS_OK;
 
-	openni::Device device;
-	openni::VideoStream depth, color;
-	const char* deviceURI = openni::ANY_DEVICE;
-	if (argc > 1)
-	{
-		deviceURI = argv[1];
-	}
+	openni::Device device1, device2;
+	openni::VideoStream depth1, depth2;
+
 
 	rc = openni::OpenNI::initialize();
-
-	printf("After initialization:\n%s\n", openni::OpenNI::getExtendedError());
-
-	rc = device.open(deviceURI);
 	if (rc != openni::STATUS_OK)
 	{
-		printf("SimpleViewer: Device open failed:\n%s\n", openni::OpenNI::getExtendedError());
-		openni::OpenNI::shutdown();
+		printf("%s: Initialize failed\n%s\n", argv[0], openni::OpenNI::getExtendedError());
 		return 1;
 	}
 
-	rc = depth.create(device, openni::SENSOR_DEPTH);
-	if (rc == openni::STATUS_OK)
+	openni::Array<openni::DeviceInfo> deviceList;
+	openni::OpenNI::enumerateDevices(&deviceList);
+
+	const char* device1Uri;
+	const char* device2Uri;
+
+	switch (argc)
 	{
-		rc = depth.start();
-		if (rc != openni::STATUS_OK)
+	case 1:
+		if (deviceList.getSize() < 2)
 		{
-			printf("SimpleViewer: Couldn't start depth stream:\n%s\n", openni::OpenNI::getExtendedError());
-			depth.destroy();
+			printf("Missing devices\n");
+			openni::OpenNI::shutdown();
+			return 1;
 		}
-	}
-	else
-	{
-		printf("SimpleViewer: Couldn't find depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+		device1Uri = deviceList[1].getUri();
+		device2Uri = deviceList[0].getUri();
+		break;
+	case 2:
+		if (deviceList.getSize() < 1)
+		{
+			printf("Missing devices\n");
+			openni::OpenNI::shutdown();
+			return 1;
+		}
+		device1Uri = argv[1];
+		if (strcmp(deviceList[0].getUri(), device1Uri) != 0)
+			device2Uri = deviceList[0].getUri();
+		else
+			device2Uri = deviceList[1].getUri();
+		break;
+	default:
+		device1Uri = argv[1];
+		device2Uri = argv[2];
 	}
 
-	rc = color.create(device, openni::SENSOR_COLOR);
-	if (rc == openni::STATUS_OK)
+	rc = device1.open(device1Uri);
+	if (rc != openni::STATUS_OK)
 	{
-		rc = color.start();
-		if (rc != openni::STATUS_OK)
-		{
-			printf("SimpleViewer: Couldn't start color stream:\n%s\n", openni::OpenNI::getExtendedError());
-			color.destroy();
-		}
-	}
-	else
-	{
-		printf("SimpleViewer: Couldn't find color stream:\n%s\n", openni::OpenNI::getExtendedError());
+		printf("%s: Couldn't open device %s\n%s\n", argv[0], device1Uri, openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return 3;
 	}
 
-	if (!depth.isValid() || !color.isValid())
+	rc = device2.open(device2Uri);
+	if (rc != openni::STATUS_OK)
+	{
+		printf("%s: Couldn't open device %s\n%s\n", argv[0], device2Uri, openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return 3;
+	}
+
+	rc = depth1.create(device1, openni::SENSOR_DEPTH);
+	if (rc != openni::STATUS_OK)
+	{
+		printf("%s: Couldn't create stream %d on device %s\n%s\n", argv[0], openni::SENSOR_DEPTH, device1Uri, openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return 4;
+	}
+	rc = depth2.create(device2, openni::SENSOR_DEPTH);
+	if (rc != openni::STATUS_OK)
+	{
+		printf("%s: Couldn't create stream %d on device %s\n%s\n", argv[0], openni::SENSOR_DEPTH, device2Uri, openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return 4;
+	}
+
+	rc = depth1.start();
+	if (rc != openni::STATUS_OK)
+	{
+		printf("%s: Couldn't start stream %d on device %s\n%s\n", argv[0], openni::SENSOR_DEPTH, device1Uri, openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return 5;
+	}
+	rc = depth2.start();
+	if (rc != openni::STATUS_OK)
+	{
+		printf("%s: Couldn't start stream %d on device %s\n%s\n", argv[0], openni::SENSOR_DEPTH, device2Uri, openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return 5;
+	}
+
+	if (!depth1.isValid() && !depth2.isValid())
 	{
 		printf("SimpleViewer: No valid streams. Exiting\n");
 		openni::OpenNI::shutdown();
-		return 2;
+		return 6;
 	}
 
-	SampleViewer sampleViewer("Simple Viewer", device, depth, color);
+	SampleViewer sampleViewer("Simple Viewer", depth1, depth2);
 
 	rc = sampleViewer.init(argc, argv);
 	if (rc != openni::STATUS_OK)
 	{
+		printf("SimpleViewer: Initialization failed\n%s\n", openni::OpenNI::getExtendedError());
 		openni::OpenNI::shutdown();
-		return 3;
+		return 7;
 	}
 	sampleViewer.run();
 }
